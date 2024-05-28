@@ -3,6 +3,7 @@
 
 import gradio as gr
 from openai import OpenAI
+import pandas as pd
 
 # gets API Key from environment variable openai .env file
 
@@ -18,6 +19,8 @@ assistants = {'@tech': 'asst_j66ZdbapEwQd5WBjHuW7dCqG',
               '@design': 'asst_e46hmiot1roakseFZnw1mByP', 
               '@manager': 'asst_o5xuIIANLSDc58geczMY94Qx'
               }
+
+colors = {'@tech': 'blue', '@design':'pink', '@manager': 'green'}
 
 fetched_assistants = {key: get_assistant(value) for key, value in assistants.items()}
 
@@ -65,7 +68,13 @@ def message_hander(message, history):
 
     # return string from messages
 
+    
+
     result = messages.data[0].content[0].text.value
+
+    # add span for the result in text. 
+    # add span for the assistant name in text.
+    result = f"<span style='color:{colors[assistant_name]}'>{result}</span>"
 
     return result
 
@@ -82,40 +91,61 @@ def clear_status():
 
 
     
+CSS ="""
+.contain { display: flex; flex-direction: column; }
+#component-0 { height: 100%; }
+#chatbot { flex-grow: 1; }
+"""
+with gr.Blocks(css=CSS) as demo:
+    with gr.Column():
 
-with gr.Blocks(theme='gradio/monochrome') as demo:
-    chat = gr.ChatInterface(fn=message_hander, title='Chat Convo')
+        cbot = gr.Chatbot(
+            height=700, render=False, render_markdown=True,
+        )
+        chat = gr.ChatInterface(fn=message_hander, chatbot=cbot, title='Chat Convo')
 
     # add button to clear
-    button = gr.Button("Use this instead Clear")
 
-    button.click(clear_status)
+    with gr.Row():
+        button = gr.Button("Use this instead Clear")
 
-    gr.Markdown("""
-                
-                We have definied the following assistants:
-                @tech: A technical assistant that can answer technical questions.
-                @design: A design assistant that can answer design questions.
-                @manager: A manager assistant that can answer managerial questions.
+        button.click(clear_status)
+        gr.Markdown("""
+                    
+                    We have definied the following assistants:
+                    @tech: A technical assistant that can answer technical questions.
+                    @design: A design assistant that can answer design questions.
+                    @manager: A manager assistant that can answer managerial questions.
 
-                They could be defined in code or can be found here https://platform.openai.com/playground/assistants?assistant=asst_e46hmiot1roakseFZnw1mByP
+                    They could be defined in code or can be found here https://platform.openai.com/playground/assistants?assistant=asst_e46hmiot1roakseFZnw1mByP
 
-                To use them type first `@tech` or `@design` or `@manager` followed by space your question. That is
+                    To use them type first `@tech` or `@design` or `@manager` followed by space your question. That is
 
-                ```
-                @design what do you think i should do for fun tv stand. 
+                    ```
+                    @design what do you think i should do for fun tv stand. 
+                    ```
 
-                
-                ```
-                ## Memory
-                The memory is shared and managed by the threads api. 
+                    to clear, clear the chat and also press the 'use this instead clear'
 
-                to clear, clear the chat and also press the 'use this instead clear'
+                    
 
-                
+                    """
+                    )
+        save_btn = gr.Button("Save")
 
-                """
-                )
+        def save_btn_fn(chat_history):
+
+            # make sure the name isn't overwriting something. 
+            import random
+
+            filename = "chat_history" + str(random.randint(0, 1000)) + ".txt"
+
+            df = pd.DataFrame(chat_history)
+
+            df.to_csv(filename, index=False)
+
+
+        save_btn.click(save_btn_fn, cbot)
 
 if __name__ == "__main__":
 
