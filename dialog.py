@@ -17,14 +17,30 @@ def get_assistant(name):
 
 assistants = {'@tech': 'asst_j66ZdbapEwQd5WBjHuW7dCqG', 
               '@design': 'asst_e46hmiot1roakseFZnw1mByP', 
-              '@manager': 'asst_o5xuIIANLSDc58geczMY94Qx'
+              '@manager': 'asst_o5xuIIANLSDc58geczMY94Qx',
+              '@draw': 'asst_Bm9dxuGcYpDXeBg22figvNc3'
               }
 
-colors = {'@tech': 'blue', '@design':'pink', '@manager': 'green'}
+colors = {'@tech': 'blue', '@design':'pink', '@manager': 'green', '@draw':'yellow'}
 
 fetched_assistants = {key: get_assistant(value) for key, value in assistants.items()}
 
 thread = client.beta.threads.create()
+
+
+def generate_image(message):
+    response = client.images.generate(
+        model='dall-e-3',
+        prompt=message,
+        style='vivid',
+        size='1024x1024',
+        quality='hd',
+        n=1
+    )
+
+    image_url = response.data[0].url
+    return image_url
+
 
 def get_message_content(message):
     content_block = message.content[0]
@@ -66,17 +82,56 @@ def message_hander(message, history):
     else:
         print("in progress...")
 
-    # return string from messages
+    tool_outputs = []
+    img = []
+    tool_calls=False
+    import json
 
-    
+    if assistant_name == '@draw':
+        tool_calls=True
 
-    result = messages.data[0].content[0].text.value
+        for tool in run.required_action.submit_tool_outputs.tool_calls:
+            tool_calls = True
+            if tool.function.name == "generate_image":
+                print(tool.function.arguments)
+                img_url = generate_image(json.loads(tool.function.arguments)['prompt'])
+                print(img_url)
+                img.append(img_url)
+                tool_outputs.append({
+                "tool_call_id": tool.id,
+                "output": img_url
+                })
 
-    # add span for the result in text. 
-    # add span for the assistant name in text.
-    result = f"<span style='color:{colors[assistant_name]}'>{result}</span>"
+        if tool_outputs:
+            try:
+                run = client.beta.threads.runs.submit_tool_outputs_and_poll(
+                thread_id=thread.id,
+                run_id=run.id,
+                tool_outputs=tool_outputs
+                )
+                print("Tool outputs submitted successfully.")
+            except Exception as e:
+                print("Failed to submit tool outputs:", e)
+        else:
+            print("No tool outputs to submit.")
+        if run.status == 'completed':
+            messages = client.beta.threads.messages.list(
+                thread_id=thread.id
+            )
+            print(messages)
+        else:
+            print(run.status)
+
+    if not tool_calls:
+        result = messages.data[0].content[0].text.value
+    else:
+        result = (img[0], 'Image file')
+    print(result)
+
+
 
     return result
+
 
 def clear_status():
     global thread
@@ -84,12 +139,6 @@ def clear_status():
     thread = client.beta.threads.create()
 
     # call chat
-
-
-
-
-
-
     
 CSS ="""
 .contain { display: flex; flex-direction: column; }
@@ -116,6 +165,7 @@ with gr.Blocks(css=CSS) as demo:
                     @tech: A technical assistant that can answer technical questions.
                     @design: A design assistant that can answer design questions.
                     @manager: A manager assistant that can answer managerial questions.
+                    @draw: A drawing assistant that can draw and show case it in the chat. 
 
                     They could be defined in code or can be found here https://platform.openai.com/playground/assistants?assistant=asst_e46hmiot1roakseFZnw1mByP
 
